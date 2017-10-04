@@ -1,6 +1,6 @@
 {
-  "name": "node-js-getting-started",
-  "version": "0.2.6",
+  "name": "pi-node-app",
+  "version": "0.0.1",
   "description": "A sample Node.js app using Express 4",
   "engines": {
     "node": "6.11.1"
@@ -11,8 +11,11 @@
     "test": "node test.js"
   },
   "dependencies": {
+    "cometd": "^3.1.2",
+    "cometd-nodejs-client": "^1.0.2",
     "ejs": "2.5.6",
-    "express": "4.15.2"
+    "express": "4.15.2",
+    "rpi-gpio": "^0.9.1"
   },
   "devDependencies": {
     "request": "^2.81.0",
@@ -20,7 +23,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/heroku/node-js-getting-started"
+    "url": ""
   },
   "keywords": [
     "node",

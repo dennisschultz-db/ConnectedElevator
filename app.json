@@ -1,8 +1,8 @@
 {
-  "name": "Start on Heroku: Node.js",
-  "description": "A barebones Node.js app using Express 4",
-  "repository": "https://github.com/heroku/node-js-getting-started",
-  "logo": "https://cdn.rawgit.com/heroku/node-js-getting-started/master/public/node.svg",
-  "keywords": ["node", "express", "heroku"],
+  "name": "Rasperry Pi Connected Elevator Controller",
+  "description": "Dreamforce Legoland demo",
+  "repository": "",
+  "logo": "",
+  "keywords": ["node", "express", "gpio", "cometd"],
   "image": "heroku/nodejs"
 }
