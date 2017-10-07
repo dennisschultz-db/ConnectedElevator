@@ -139,16 +139,17 @@ function moveElevatorToFloor(floor) {
 
 };
 
-const photoFilename = 'testPhotoName.jpg';
+const photoFilename = 'legoPhoto.jpg';
 
 // 
 function takePictureAndAlertIoT() {
+    var salesforceFileId;
     console.log('TAKE PICTURE');
     camera.takePhoto(photoFilename).then((photo) => {
 
         console.log('Photo taken');
-        // specify the path to the file, and create a buffer with characters we want to write
-        const path = 'text.txt';
+
+       // Create the first part of the multipart form file        
         var buffer = new Buffer(
             '--boundary_string\n' +
             'Content-Disposition: form-data; name="entity_content";\n' +
@@ -164,26 +165,16 @@ function takePictureAndAlertIoT() {
             'Content-Disposition: form-data; name="VersionData"; filename="' + photoFilename + '"\n' +
             '\n');
 
+        // Create the end of the multipart form file
         var buffer2 = new Buffer(
             '\n' +
             '\n' +
             '--boundary_string--\n');
 
+        // Munge the parts together with the photo in the middle
         var buffer3 = Buffer.concat([buffer, photo, buffer2]);
 
-        // open the file in writing mode, adding a callback function where we do the actual writing
-        fs.open(path, 'w', function (err, fd) {
-            if (err) throw 'could not open file: ' + err;
-
-            // write the contents of the buffer, from position 0 to the end, to the file descriptor returned in opening our file
-            fs.write(fd, buffer3, 0, buffer3.length, null, function (err) {
-                if (err) throw 'error writing file: ' + err;
-                fs.close(fd, function () {
-                    console.log('wrote the file successfully');
-                });
-            });
-        });
-
+        // Post the picture as a new ContentVersion (File) in the Salesforce org
         request.post(
             {
                 url: salesforce_url + '/services/data/v40.0/sobjects/ContentVersion/',
@@ -196,10 +187,30 @@ function takePictureAndAlertIoT() {
             },
             function (err, httpResponse, body) {
                 if (err) return console.error('Failed to upload multipart file');
-                console.log('Upload response is ' + JSON.stringify(httpResponse));
-                console.log('Upload response data is ' + JSON.stringify(body));
+                console.log('Upload response status is ' + httpResponse.statusCode);
+                salesforceFileId = JSON.parse(body).id;
+                console.log('Id of file created ' + salesforceFileId);
+
+                request.post(
+                  {
+                    url: salesforce_url + '/services/data/v40.0/sobjects/ApproachingRider__e',
+                    method: 'POST',
+                    headers: {
+                      Authorization: 'Bearer ' + access_token,
+                      'Content-Type': application/json
+                    },
+                    form: {
+                      Device_Id__c : "ELEVATOR-001",
+                      RiderPictureId__c : ' + salesforceFileId + '
+                    }
+                  },
+                  function (err, httpResponse, body) {
+                    if (err) return console.error('Failed to create Platform Event');
+                    console.log('Platform Event response status is ' + httpResponse.statusCode);
+                  });
+                });
             });
-    });
+    }
 };
 
 // Event handler fired when a MoveElevator Platform Event is detected
