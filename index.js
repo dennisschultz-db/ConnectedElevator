@@ -206,8 +206,6 @@ function takePictureAndAlertIoT() {
           function (err, httpResponse, body) {
             if (err) return console.error('Failed to create Platform Event');
             console.log('Platform Event response status is ' + httpResponse.statusCode);
-   console.log('Platform resopnse ' + JSON.stringify(httpResponse));
-
           });
 
       });
