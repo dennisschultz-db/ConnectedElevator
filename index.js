@@ -196,17 +196,18 @@ function takePictureAndAlertIoT() {
             url: salesforce_url + '/services/data/v40.0/sobjects/ApproachingRider__e',
             method: 'POST',
             headers: {
-              Authorization: 'Bearer ' + access_token,
-              'Content-Type': application / json
+              Authorization: 'Bearer ' + access_token
             },
-            form: {
-              Device_Id__c: "ELEVATOR-001",
-              RiderPictureId__c: ' + salesforceFileId + '
+            json: {
+              DeviceId__c: "ELEVATOR-001",
+              RiderPictureId__c: salesforceFileId
             }
           },
           function (err, httpResponse, body) {
             if (err) return console.error('Failed to create Platform Event');
             console.log('Platform Event response status is ' + httpResponse.statusCode);
+   console.log('Platform resopnse ' + JSON.stringify(httpResponse));
+
           });
 
       });
