@@ -5,29 +5,42 @@ const camera = new Raspistill({
   width: 1296,
   height: 972
 });
+
 // GPIO - General Purpose I/O pin control
 var gpio = require('rpi-gpio');
+
 // Cometd libraries enable subscription to Platform Events
 var cometdnodejs = require('cometd-nodejs-client').adapt();
 var cometdlib = require('cometd');
 var cometd = new cometdlib.CometD();
 var TimeStampExtension = require('cometd/TimeStampExtension');
 cometd.registerExtension('timestamp', new TimeStampExtension());
+
 // Express - for HTTP messaging
 var express = require('express');
 var app = express();
+
 // Request - for making HTTP outbound calls
 var request = require('request');
 const fs = require('fs');
 
+// NForce - simplifies authtentication with Salesforce
+var nforce = require('nforce');
 
-// TODO: Automate the acquisition of the bearer token
-// For now, create token using bash script.
-const CLIENT_ID = '3MVG9SemV5D80oBdmc6xXgw8vJXukPIYmjGVvw3DUQnz9yElDgEhg1_NcmTU2LZrN5jRcYUHkcTctdjPt8TD6';
-const CLIENT_SECRET = '763717480919241910';
-const USERNAME = 'dschultz-ubcu@force.com';
+
+// Old Winter18 Trial org
+//const CLIENT_ID = '3MVG9SemV5D80oBdmc6xXgw8vJXukPIYmjGVvw3DUQnz9yElDgEhg1_NcmTU2LZrN5jRcYUHkcTctdjPt8TD6';
+//const CLIENT_SECRET = '763717480919241910';
+//const USERNAME = 'dschultz-ubcu@force.com';
+//const PASSWORD = 'salesforce1';
+//const SECURITY_TOKEN = 'DvQgm3UuPu9aJceIq2lVn7U8C';
+
+const CLIENT_ID = '3MVG9uGEVv_svxtIAJy0oab3RtzAW6WYWMT3qcNj4xx3homKaAx8.5JR82OJbLyKw3ec8w.wsv4w2MBtQRONn';
+const CLIENT_SECRET = '1894084629980817521';
+const USERNAME = 'dschultz@legoland.demo';
 const PASSWORD = 'salesforce1';
-const SECURITY_TOKEN = 'DvQgm3UuPu9aJceIq2lVn7U8C';
+const SECURITY_TOKEN = '6ypT5cibV39z9JdAG6s6HUJJ';
+
 const AUTH_URL = 'https://login.salesforce.com/services/oauth2/token';
 var access_token;
 var salesforce_url;
@@ -36,44 +49,50 @@ var salesforce_url;
 const MOVE_ELEVATOR_TOPIC = '/event/MoveElevator__e';
 const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 
-request.post({
-  url: AUTH_URL,
-  form: {
-    grant_type: 'password',
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    username: USERNAME,
-    password: PASSWORD + SECURITY_TOKEN
+// Create a connection to the IoT Explorer Salesforce org
+var org = nforce.createConnection({
+  clientId: CLIENT_ID,
+  clientSecret: CLIENT_SECRET,
+  redirectUri: 'http://localhost:5000/oauth/_callback',
+  mode: 'single',
+  autoRefresh: true
+});
+
+// Authenticate to the org
+org.authenticate({
+  username: USERNAME,
+  password: PASSWORD,
+  securityToken: SECURITY_TOKEN
+}, function(err, resp) {
+  if (err) {
+    return console.error('Unable to get security token');
   }
-},
-  function (err, httpResponse, body) {
-    if (err) {
-      return console.error('Unable to get security token');
-    }
-    access_token = JSON.parse(body).access_token;
-    salesforce_url = JSON.parse(body).instance_url;
-    console.log('salesforce url is ' + salesforce_url);
+  console.log('Authenticate response ' + JSON.stringify(resp));
+  access_token = resp.access_token;
+  salesforce_url = resp.instance_url;
+  console.log('Access token ' + access_token);
+  console.log('Salesforce URL ' + salesforce_url);
 
-    // Configure the CometD object.
-    cometd.configure({
-      url: salesforce_url + '/cometd/40.0/',
-      requestHeaders: { Authorization: 'Bearer ' + access_token },
-      appendMessageTypeToURL: false
-    });
-
-    // Handshake with the server and subscribe to the PE.
-    cometd.handshake(function (h) {
-      if (h.successful) {
-        // Subscribe to receive messages from the server.
-        cometd.subscribe(MOVE_ELEVATOR_TOPIC, onMoveElevator);
-        console.log('Cometd subscribed to ' + MOVE_ELEVATOR_TOPIC + ' successfully');
-        cometd.subscribe(MOTION_DETECTED_TOPIC, onMotionDetected);
-        console.log('Cometd subscribed to ' + MOTION_DETECTED_TOPIC + ' successfully');
-      } else {
-        console.log('Unable to connect to cometd ' + JSON.stringify(h));
-      }
-    });
+  // Configure the CometD object.
+  cometd.configure({
+    url: salesforce_url + '/cometd/40.0/',
+    requestHeaders: { Authorization: 'Bearer ' + access_token },
+    appendMessageTypeToURL: false
   });
+
+  // Handshake with the server and subscribe to the PE.
+  cometd.handshake(function (h) {
+    if (h.successful) {
+      // Subscribe to receive messages from the server.
+      cometd.subscribe(MOVE_ELEVATOR_TOPIC, onMoveElevator);
+      console.log('Cometd subscribed to ' + MOVE_ELEVATOR_TOPIC + ' successfully');
+      cometd.subscribe(MOTION_DETECTED_TOPIC, onMotionDetected);
+      console.log('Cometd subscribed to ' + MOTION_DETECTED_TOPIC + ' successfully');
+    } else {
+      console.log('Unable to connect to cometd ' + JSON.stringify(h));
+    }
+  });
+});
 
 
 // Mapping of floors to WiringPi pin numbers of LEDs
@@ -191,22 +210,32 @@ function takePictureAndAlertIoT() {
         salesforceFileId = JSON.parse(body).id;
         console.log('Id of file created ' + salesforceFileId);
 
-        request.post(
-          {
-            url: salesforce_url + '/services/data/v40.0/sobjects/ApproachingRider__e',
-            method: 'POST',
-            headers: {
-              Authorization: 'Bearer ' + access_token
-            },
-            json: {
-              DeviceId__c: "ELEVATOR-001",
-              RiderPictureId__c: salesforceFileId
-            }
-          },
-          function (err, httpResponse, body) {
-            if (err) return console.error('Failed to create Platform Event');
-            console.log('Platform Event response status is ' + httpResponse.statusCode);
-          });
+        var approachingRiderEvent = nforce.createSObject('ApproachingRider__e');
+        approachingRiderEvent.set ('DeviceId__c', 'ELEVATOR-001');
+        approachingRiderEvent.set ('RiderPictureId__c', salesforceFileId);
+        org.insert({
+          sobject: approachingRiderEvent
+        },
+        function (err, resp) {
+          if(!err) console.log('Event created');
+        });
+
+//        request.post(
+//          {
+//            url: salesforce_url + '/services/data/v40.0/sobjects/ApproachingRider__e',
+//            method: 'POST',
+//            headers: {
+//              Authorization: 'Bearer ' + access_token
+//            },
+//            json: {
+//              DeviceId__c: "ELEVATOR-001",
+//              RiderPictureId__c: salesforceFileId
+//            }
+//          },
+//          function (err, httpResponse, body) {
+//            if (err) return console.error('Failed to create Platform Event');
+//            console.log('Platform Event response status is ' + httpResponse.statusCode);
+//          });
 
       });
   })
