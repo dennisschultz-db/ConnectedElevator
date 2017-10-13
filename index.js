@@ -20,11 +20,6 @@ cometd.registerExtension('timestamp', new TimeStampExtension());
 var express = require('express');
 var app = express();
 
-// Request - for making HTTP outbound calls
-var request = require('request');
-const fs = require('fs');
-var path = require('path');
-
 // NForce - simplifies authtentication with Salesforce
 var nforce = require('nforce');
 
