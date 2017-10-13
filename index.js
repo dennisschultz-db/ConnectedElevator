@@ -23,6 +23,7 @@ var app = express();
 // Request - for making HTTP outbound calls
 var request = require('request');
 const fs = require('fs');
+var path = require('path');
 
 // NForce - simplifies authtentication with Salesforce
 var nforce = require('nforce');
@@ -67,7 +68,6 @@ org.authenticate({
   if (err) {
     return console.error('Unable to get security token');
   }
-  console.log('Authenticate response ' + JSON.stringify(resp));
   access_token = resp.access_token;
   salesforce_url = resp.instance_url;
   console.log('Access token ' + access_token);
@@ -168,48 +168,17 @@ function takePictureAndAlertIoT() {
 
     console.log('Photo taken');
 
-    // Create the first part of the multipart form file        
-    var buffer = new Buffer(
-      '--boundary_string\n' +
-      'Content-Disposition: form-data; name="entity_content";\n' +
-      'Content-Type: application/json\n' +
-      '\n' +
-      '{\n' +
-      '    "Description" : "Test Lego image",\n' +
-      '    "PathOnClient" : "' + photoFilename + '"\n' +
-      '}\n' +
-      '\n' +
-      '--boundary_string\n' +
-      'Content-Type: image/jpg\n' +
-      'Content-Disposition: form-data; name="VersionData"; filename="' + photoFilename + '"\n' +
-      '\n');
-
-    // Create the end of the multipart form file
-    var buffer2 = new Buffer(
-      '\n' +
-      '\n' +
-      '--boundary_string--\n');
-
-    // Munge the parts together with the photo in the middle
-    var buffer3 = Buffer.concat([buffer, photo, buffer2]);
 
     // Post the picture as a new ContentVersion (File) in the Salesforce org
-    var doc = nforce.createSObject(
-      'ContentVersion',
-      {
-        Description: "Legoman Image",
-        PathOnClient: + photoFilename,
-        Type: 'image/jpg',
+    var doc = nforce.createSObject( 'ContentVersion');
+    doc.set('reasonForChange', 'Legoman Image');
+    doc.set('pathOnClient', photoFilename);
+    doc.setAttachment(photoFilename, photo);
 
-        attachment: {
-          filename: photoFilename,
-          body: photo
-        }
-      }
-    ).then(function (resp) {
-      console.log('Upload response is ' + JSON.stringify(resp));
+    org.insert ({sobject: doc}, function(err, resp) {
+      if (err) return console.log(err);
       salesforceFileId = resp.id;
-      console.log('Id of file created ' + salesforceFileId);
+      console.log('Id of ContentVersion created ' + salesforceFileId);
 
       // Create the platform event
       var approachingRiderEvent = nforce.createSObject('ApproachingRider__e');
@@ -219,11 +188,12 @@ function takePictureAndAlertIoT() {
         sobject: approachingRiderEvent
       },
         function (err, resp) {
-          if (!err) console.log('Event created');
+          if (err) return console.log(err);
+          console.log('Platform event created ' + resp.id);
         });
     });
 
-  })
+  });
 };
 
 // Event handler fired when a MoveElevator Platform Event is detected
