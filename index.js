@@ -63,7 +63,7 @@ org.authenticate({
   username: USERNAME,
   password: PASSWORD,
   securityToken: SECURITY_TOKEN
-}, function(err, resp) {
+}, function (err, resp) {
   if (err) {
     return console.error('Unable to get security token');
   }
@@ -194,50 +194,35 @@ function takePictureAndAlertIoT() {
     var buffer3 = Buffer.concat([buffer, photo, buffer2]);
 
     // Post the picture as a new ContentVersion (File) in the Salesforce org
-    request.post(
+    var doc = nforce.createSObject(
+      'ContentVersion',
       {
-        url: salesforce_url + '/services/data/v40.0/sobjects/ContentVersion/',
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + access_token,
-          'Content-Type': 'multipart/form-data; boundary="boundary_string"'
-        },
-        body: buffer3
+        Description: "Legoman Image",
+        PathOnClient: + photoFilename,
+        Type: 'image/jpg',
+
+        attachment: {
+          filename: photoFilename,
+          body: photo
+        }
+      }
+    ).then(function (resp) {
+      console.log('Upload response is ' + JSON.stringify(resp));
+      salesforceFileId = resp.id;
+      console.log('Id of file created ' + salesforceFileId);
+
+      // Create the platform event
+      var approachingRiderEvent = nforce.createSObject('ApproachingRider__e');
+      approachingRiderEvent.set('DeviceId__c', 'ELEVATOR-001');
+      approachingRiderEvent.set('RiderPictureId__c', salesforceFileId);
+      org.insert({
+        sobject: approachingRiderEvent
       },
-      function (err, httpResponse, body) {
-        if (err) return console.error('Failed to upload multipart file');
-        console.log('Upload response status is ' + httpResponse.statusCode);
-        salesforceFileId = JSON.parse(body).id;
-        console.log('Id of file created ' + salesforceFileId);
-
-        var approachingRiderEvent = nforce.createSObject('ApproachingRider__e');
-        approachingRiderEvent.set ('DeviceId__c', 'ELEVATOR-001');
-        approachingRiderEvent.set ('RiderPictureId__c', salesforceFileId);
-        org.insert({
-          sobject: approachingRiderEvent
-        },
         function (err, resp) {
-          if(!err) console.log('Event created');
+          if (!err) console.log('Event created');
         });
+    });
 
-//        request.post(
-//          {
-//            url: salesforce_url + '/services/data/v40.0/sobjects/ApproachingRider__e',
-//            method: 'POST',
-//            headers: {
-//              Authorization: 'Bearer ' + access_token
-//            },
-//            json: {
-//              DeviceId__c: "ELEVATOR-001",
-//              RiderPictureId__c: salesforceFileId
-//            }
-//          },
-//          function (err, httpResponse, body) {
-//            if (err) return console.error('Failed to create Platform Event');
-//            console.log('Platform Event response status is ' + httpResponse.statusCode);
-//          });
-
-      });
   })
 };
 
