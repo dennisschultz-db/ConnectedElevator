@@ -45,6 +45,15 @@ var salesforce_url;
 const MOVE_ELEVATOR_TOPIC = '/event/MoveElevator__e';
 const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 
+// Mapping of floors to WiringPi pin numbers of LEDs
+const FLOORS = [3, 5, 7, 11, 13, 15, 19, 21];
+const photoFilename = 'legoPhoto.jpg';
+
+// Current location of elevator
+var currentFloor = 1;
+const idleInterval = 10000;
+var idleTimer;
+
 // Create a connection to the IoT Explorer Salesforce org
 var org = nforce.createConnection({
   clientId: CLIENT_ID,
@@ -90,13 +99,6 @@ org.authenticate({
 });
 
 
-// Mapping of floors to WiringPi pin numbers of LEDs
-const FLOORS = [3, 5, 7, 11, 13, 15, 19, 21];
-
-
-// Current location of elevator
-var currentFloor = 1;
-
 // Configure the app for HTTP
 app.set('port', (process.env.PORT || 5000));
 app.use(express.static(__dirname + '/public'));
@@ -115,6 +117,22 @@ function configureGPIO() {
       gpio.write(FLOORS[0], 1);
     });
   }
+}
+
+function startIdleTimer() {
+  idleTimer = setInterval(function () {
+    moveElevatorToRandomFloor()
+  },
+    idleInterval);  
+}
+
+function stopIdleTimer() {
+  clearInterval(idleTimer);
+}
+
+function moveElevatorToRandomFloor() {
+  var newFloor = Math.floor(Math.random() * FLOORS.length);
+  moveElevatorToFloor(newFloor);
 }
 
 function setFloor(floor, state) {
@@ -153,8 +171,6 @@ function moveElevatorToFloor(floor) {
 
 };
 
-const photoFilename = 'legoPhoto.jpg';
-
 // 
 function takePictureAndAlertIoT() {
   var salesforceFileId;
@@ -165,12 +181,12 @@ function takePictureAndAlertIoT() {
 
 
     // Post the picture as a new ContentVersion (File) in the Salesforce org
-    var doc = nforce.createSObject( 'ContentVersion');
+    var doc = nforce.createSObject('ContentVersion');
     doc.set('reasonForChange', 'Legoman Image');
     doc.set('pathOnClient', photoFilename);
     doc.setAttachment(photoFilename, photo);
 
-    org.insert ({sobject: doc}, function(err, resp) {
+    org.insert({ sobject: doc }, function (err, resp) {
       if (err) return console.log(err);
       salesforceFileId = resp.id;
       console.log('Id of ContentVersion created ' + salesforceFileId);
@@ -191,23 +207,38 @@ function takePictureAndAlertIoT() {
   });
 };
 
+
+//===================================
+// Platform Event handlers
+//===================================
 // Event handler fired when a MoveElevator Platform Event is detected
 function onMoveElevator(m) {
+  // Stop the idle timer
+  stopIdleTimer();
+
   var dataFromServer = m.data;
   //  console.log('Move Elevator event handled: ' + JSON.stringify(dataFromServer));
   var floor = dataFromServer.payload.Floor__c;
   console.log('Moving elevator from floor ' + currentFloor + ' to floor ' + floor);
   moveElevatorToFloor(floor);
+
+  startIdleTimer();
 }
 
 // Event handler fired when a MotionDetected Platform Event is detected
 function onMotionDetected(m) {
+  // Stop the idle timer
+  stopIdleTimer();
+  moveElevatorToFloor(1);
+
   var dataFromServer = m.data;
   console.log('Motion has been detected.  Initiating picture cycle');
   takePictureAndAlertIoT();
 }
 
-
+//===================================
+// HTTP handlers
+//===================================
 // HTTP Get handler /
 // Renders the default page.  Mainly for testing.
 app.get('/', function (request, response) {
@@ -219,12 +250,17 @@ app.get('/', function (request, response) {
 // Query Parameters:
 //   floor  -  The floor to move to
 app.get('/moveTo', function (request, response) {
-  var floor = request.query.floor;
-  console.log('Moving elevator from floor ' + currentFloor + ' to floor ' + floor);
+    // Stop the idle timer
+    stopIdleTimer();
+        
+    var floor = request.query.floor;
+    console.log('Moving elevator from floor ' + currentFloor + ' to floor ' + floor);
 
-  moveElevatorToFloor(floor);
+    moveElevatorToFloor(floor);
 
-  response.send('Moved to floor ' + floor);
+    startIdleTimer();
+
+    response.send('Moved to floor ' + floor);
 });
 
 // HTTP Get handler /riderThisWayCometh
@@ -232,11 +268,15 @@ app.get('/moveTo', function (request, response) {
 // Query Parameters:
 //   none
 app.get('/riderThisWayCometh', function (request, response) {
-  console.log('A rider has approached the elevator');
+    // Stop the idle timer
+    stopIdleTimer();
+    
+    
+    console.log('A rider has approached the elevator');
 
-  takePictureAndAlertIoT();
+    takePictureAndAlertIoT();
 
-  response.send('A rider has approached the elevator');
+    response.send('A rider has approached the elevator');
 });
 
 app.listen(app.get('port'), function () {
