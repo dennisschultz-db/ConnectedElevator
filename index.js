@@ -38,6 +38,7 @@ var salesforce_url;
 // Topic paths for the Platform Events
 const MOVE_ELEVATOR_TOPIC = '/event/MoveElevator__e';
 const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
+const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 
 // Mapping of floors to WiringPi pin numbers of LEDs
 const FLOORS = [3, 5, 7, 11, 13, 15, 19, 21];
@@ -86,6 +87,8 @@ org.authenticate({
       console.log('Cometd subscribed to ' + MOVE_ELEVATOR_TOPIC + ' successfully');
       cometd.subscribe(MOTION_DETECTED_TOPIC, onMotionDetected);
       console.log('Cometd subscribed to ' + MOTION_DETECTED_TOPIC + ' successfully');
+      cometd.subscribe(TAKE_RIDER_TO_FLOOR_TOPIC, onTakeRiderToFloor);
+      console.log('Cometd subscribed to ' + TAKE_RIDER_TO_FLOOR_TOPIC + ' successfully');
     } else {
       console.log('Unable to connect to cometd ' + JSON.stringify(h));
     }
@@ -167,23 +170,6 @@ function moveElevatorToFloor(floor) {
     );
   };
 
-  if (currentFloor == floor) {
-    setTimeout(
-      function() {
-        // Create the platform event
-        var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
-        rideCompleteEvent.set('DeviceId__c', DEVICEID);
-        org.insert({
-          sobject: rideCompleteEvent
-        },
-          function (err, resp) {
-            if (err) return console.log(err);
-            console.log('Platform event created ' + resp.id);
-          });
-      },
-      1000
-    );
-  }
 };
 
 // 
@@ -249,6 +235,39 @@ function onMotionDetected(m) {
   var dataFromServer = m.data;
   console.log('Motion has been detected.  Initiating picture cycle');
   takePictureAndAlertIoT();
+}
+
+// Event handler fired when the orchestration is commanding to have a rider transported
+function onTakeRiderToFloor(m) {
+  // Stop the idle timer
+  stopIdleTimer();
+
+  var dataFromServer = m.data
+  var floor = dataFromServer.payload.Floor__c;
+
+  console.log('Taking rider from floor ' + currentFloor + ' to floor ' + floor);
+  moveElevatorToFloor(floor);
+
+  // Wait 10 sec, then tell the Orchestration we are done.
+  setTimeout(
+      function() {
+        // Create the platform event
+        var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
+        rideCompleteEvent.set('DeviceId__c', DEVICEID);
+        org.insert({
+          sobject: rideCompleteEvent
+        },
+          function (err, resp) {
+            if (err) return console.log(err);
+            console.log('Platform event created ' + resp.id);
+          });
+        
+        startIdleTimer();
+          
+      },
+      10000
+  );
+
 }
 
 //===================================
