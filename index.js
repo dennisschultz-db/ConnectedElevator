@@ -24,18 +24,12 @@ var app = express();
 var nforce = require('nforce');
 
 
-// Old Winter18 Trial org
-//const CLIENT_ID = '3MVG9SemV5D80oBdmc6xXgw8vJXukPIYmjGVvw3DUQnz9yElDgEhg1_NcmTU2LZrN5jRcYUHkcTctdjPt8TD6';
-//const CLIENT_SECRET = '763717480919241910';
-//const USERNAME = 'dschultz-ubcu@force.com';
-//const PASSWORD = 'salesforce1';
-//const SECURITY_TOKEN = 'DvQgm3UuPu9aJceIq2lVn7U8C';
-
 const CLIENT_ID = '3MVG9uGEVv_svxtIAJy0oab3RtzAW6WYWMT3qcNj4xx3homKaAx8.5JR82OJbLyKw3ec8w.wsv4w2MBtQRONn';
 const CLIENT_SECRET = '1894084629980817521';
 const USERNAME = 'dschultz@legoland.demo';
 const PASSWORD = 'salesforce1';
 const SECURITY_TOKEN = '6ypT5cibV39z9JdAG6s6HUJJ';
+const DEVICEID = 'ELEVATOR-001';
 
 const AUTH_URL = 'https://login.salesforce.com/services/oauth2/token';
 var access_token;
@@ -106,7 +100,7 @@ app.use(express.static(__dirname + '/public'));
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 
-
+// Initialize system
 configureGPIO();
 startIdleTimer();
 
@@ -173,6 +167,18 @@ function moveElevatorToFloor(floor) {
     );
   };
 
+  if (currentFloor == floor) {
+      // Create the platform event
+      var rideCompleteEvent = nforce.createSObject('ApproachingRider__e');
+      rideCompleteEvent.set('DeviceId__c', DEVICEID);
+      org.insert({
+        sobject: rideCompleteEvent
+      },
+        function (err, resp) {
+          if (err) return console.log(err);
+          console.log('Platform event created ' + resp.id);
+        });
+  }
 };
 
 // 
@@ -197,7 +203,7 @@ function takePictureAndAlertIoT() {
 
       // Create the platform event
       var approachingRiderEvent = nforce.createSObject('ApproachingRider__e');
-      approachingRiderEvent.set('DeviceId__c', 'ELEVATOR-001');
+      approachingRiderEvent.set('DeviceId__c', DEVICEID);
       approachingRiderEvent.set('RiderPictureId__c', salesforceFileId);
       org.insert({
         sobject: approachingRiderEvent
