@@ -108,6 +108,7 @@ app.set('view engine', 'ejs');
 
 
 configureGPIO();
+startIdleTimer();
 
 //==============================================================
 // local functions
@@ -120,6 +121,7 @@ function configureGPIO() {
 }
 
 function startIdleTimer() {
+  console.log('Idle motion');
   idleTimer = setInterval(function () {
     moveElevatorToRandomFloor()
   },
@@ -127,11 +129,13 @@ function startIdleTimer() {
 }
 
 function stopIdleTimer() {
+  console.log('Stopping idle motion');
   clearInterval(idleTimer);
 }
 
 function moveElevatorToRandomFloor() {
-  var newFloor = Math.floor(Math.random() * FLOORS.length);
+  var newFloor = Math.floor(Math.random() * FLOORS.length) +1;
+  console.log('Randomly moving elevator to floor ' + newFloor);
   moveElevatorToFloor(newFloor);
 }
 
@@ -270,6 +274,7 @@ app.get('/moveTo', function (request, response) {
 app.get('/riderThisWayCometh', function (request, response) {
     // Stop the idle timer
     stopIdleTimer();
+    moveElevatorToFloor(1);
     
     
     console.log('A rider has approached the elevator');
