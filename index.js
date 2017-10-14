@@ -168,16 +168,21 @@ function moveElevatorToFloor(floor) {
   };
 
   if (currentFloor == floor) {
-      // Create the platform event
-      var rideCompleteEvent = nforce.createSObject('ApproachingRider__e');
-      rideCompleteEvent.set('DeviceId__c', DEVICEID);
-      org.insert({
-        sobject: rideCompleteEvent
+    setTimeout(
+      function() {
+        // Create the platform event
+        var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
+        rideCompleteEvent.set('DeviceId__c', DEVICEID);
+        org.insert({
+          sobject: rideCompleteEvent
+        },
+          function (err, resp) {
+            if (err) return console.log(err);
+            console.log('Platform event created ' + resp.id);
+          });
       },
-        function (err, resp) {
-          if (err) return console.log(err);
-          console.log('Platform event created ' + resp.id);
-        });
+      1000
+    );
   }
 };
 
