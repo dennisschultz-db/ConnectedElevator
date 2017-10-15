@@ -36,7 +36,6 @@ var access_token;
 var salesforce_url;
 
 // Topic paths for the Platform Events
-const MOVE_ELEVATOR_TOPIC = '/event/MoveElevator__e';
 const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 
@@ -47,6 +46,7 @@ const photoFilename = 'legoPhoto.jpg';
 // Current location of elevator
 var currentFloor = 1;
 const idleInterval = 10000;
+var floorIntervalTimer;
 var idleTimer;
 
 // Create a connection to the IoT Explorer Salesforce org
@@ -83,8 +83,6 @@ org.authenticate({
   cometd.handshake(function (h) {
     if (h.successful) {
       // Subscribe to receive messages from the server.
-      cometd.subscribe(MOVE_ELEVATOR_TOPIC, onMoveElevator);
-      console.log('Cometd subscribed to ' + MOVE_ELEVATOR_TOPIC + ' successfully');
       cometd.subscribe(MOTION_DETECTED_TOPIC, onMotionDetected);
       console.log('Cometd subscribed to ' + MOTION_DETECTED_TOPIC + ' successfully');
       cometd.subscribe(TAKE_RIDER_TO_FLOOR_TOPIC, onTakeRiderToFloor);
@@ -130,6 +128,11 @@ function stopIdleTimer() {
   clearInterval(idleTimer);
 }
 
+function stopFloorIntervalTimer() {
+  console.log('Stopping Floor Interval Timer');
+  clearTimeout(floorIntervalTimer);
+}
+
 function moveElevatorToRandomFloor() {
   var newFloor = Math.floor(Math.random() * FLOORS.length) +1;
   console.log('Randomly moving elevator to floor ' + newFloor);
@@ -148,7 +151,7 @@ function moveElevatorToFloor(floor) {
     console.log('... floor ' + currentFloor);
     setFloor(currentFloor - 1, 0);
     setFloor(currentFloor, 1);
-    setTimeout(
+    floorIntervalTimer = setTimeout(
       function () {
         moveElevatorToFloor(floor);
       },
@@ -162,7 +165,7 @@ function moveElevatorToFloor(floor) {
     console.log('... floor ' + currentFloor);
     setFloor(currentFloor + 1, 0);
     setFloor(currentFloor, 1);
-    setTimeout(
+    floorIntervalTimer = setTimeout(
       function () {
         moveElevatorToFloor(floor);
       },
@@ -201,7 +204,7 @@ function takePictureAndAlertIoT() {
       },
         function (err, resp) {
           if (err) return console.log(err);
-          console.log('Platform event created ' + resp.id);
+          console.log('Approaching Rider platform event created ' + resp.id);
         });
     });
 
@@ -212,20 +215,6 @@ function takePictureAndAlertIoT() {
 //===================================
 // Platform Event handlers
 //===================================
-// Event handler fired when a MoveElevator Platform Event is detected
-function onMoveElevator(m) {
-  // Stop the idle timer
-  stopIdleTimer();
-
-  var dataFromServer = m.data;
-  //  console.log('Move Elevator event handled: ' + JSON.stringify(dataFromServer));
-  var floor = dataFromServer.payload.Floor__c;
-  console.log('Moving elevator from floor ' + currentFloor + ' to floor ' + floor);
-  moveElevatorToFloor(floor);
-
-  startIdleTimer();
-}
-
 // Event handler fired when a MotionDetected Platform Event is detected
 function onMotionDetected(m) {
   // Stop the idle timer
@@ -239,6 +228,8 @@ function onMotionDetected(m) {
 
 // Event handler fired when the orchestration is commanding to have a rider transported
 function onTakeRiderToFloor(m) {
+  // Stop the floor interval timer
+  stopFloorIntervalTimer();
   // Stop the idle timer
   stopIdleTimer();
 
@@ -259,7 +250,7 @@ function onTakeRiderToFloor(m) {
         },
           function (err, resp) {
             if (err) return console.log(err);
-            console.log('Platform event created ' + resp.id);
+            console.log('Ride Complete platform event created ' + resp.id);
           });
         
         startIdleTimer();
@@ -279,11 +270,11 @@ app.get('/', function (request, response) {
   response.render('pages/index');
 });
 
-// HTTP Get handler /moveTo
+// HTTP Get handler /TakeRiderToFloor
 // Moves the elevator to the desired floor
 // Query Parameters:
 //   floor  -  The floor to move to
-app.get('/moveTo', function (request, response) {
+app.get('/TakeRiderToFloor', function (request, response) {
     // Stop the idle timer
     stopIdleTimer();
         
