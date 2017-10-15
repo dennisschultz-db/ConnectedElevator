@@ -46,7 +46,7 @@ const photoFilename = 'legoPhoto.jpg';
 // Current location of elevator
 var currentFloor = 1;
 const idleInterval = 10000;
-var floorIntervalTimer;
+var floorIntervalTimers = [];
 var idleTimer;
 
 // Create a connection to the IoT Explorer Salesforce org
@@ -120,7 +120,7 @@ function startIdleTimer() {
   idleTimer = setInterval(function () {
     moveElevatorToRandomFloor()
   },
-    idleInterval);  
+    idleInterval);
 }
 
 function stopIdleTimer() {
@@ -129,12 +129,16 @@ function stopIdleTimer() {
 }
 
 function stopFloorIntervalTimer() {
-  console.log('Stopping Floor Interval Timer');
-  clearTimeout(floorIntervalTimer);
+  console.log('Stopping Floor Interval Timers');
+  for (var i = 0; i < floorIntervalTimers.length; i++) {
+    clearTimeout(floorIntervalTimers[i]);
+  }
+  //reset timer array
+  floorIntervalTimers = [];
 }
 
 function moveElevatorToRandomFloor() {
-  var newFloor = Math.floor(Math.random() * FLOORS.length) +1;
+  var newFloor = Math.floor(Math.random() * FLOORS.length) + 1;
   console.log('Randomly moving elevator to floor ' + newFloor);
   moveElevatorToFloor(newFloor);
 }
@@ -151,11 +155,13 @@ function moveElevatorToFloor(floor) {
     console.log('... floor ' + currentFloor);
     setFloor(currentFloor - 1, 0);
     setFloor(currentFloor, 1);
-    floorIntervalTimer = setTimeout(
-      function () {
-        moveElevatorToFloor(floor);
-      },
-      1000
+    floorIntervalTimers.push(
+      setTimeout(
+        function () {
+          moveElevatorToFloor(floor);
+        },
+        1000
+      )
     );
   };
 
@@ -165,11 +171,13 @@ function moveElevatorToFloor(floor) {
     console.log('... floor ' + currentFloor);
     setFloor(currentFloor + 1, 0);
     setFloor(currentFloor, 1);
-    floorIntervalTimer = setTimeout(
-      function () {
-        moveElevatorToFloor(floor);
-      },
-      1000
+    floorIntervalTimers.push(
+      setTimeout(
+        function () {
+          moveElevatorToFloor(floor);
+        },
+        1000
+      )
     );
   };
 
@@ -241,28 +249,28 @@ function onTakeRiderToFloor(m) {
 
   // Wait 10 sec, then tell the Orchestration we are done.
   setTimeout(
-      function() {
-        // Create the platform event
-        var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
-        rideCompleteEvent.set('DeviceId__c', DEVICEID);
-        org.insert({
-          sobject: rideCompleteEvent
-        },
-          function (err, resp) {
-            if (err) return console.log(err);
-            console.log('Ride Complete platform event created ' + resp.id);
-          });
-        
-        startIdleTimer();
-          
+    function () {
+      // Create the platform event
+      var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
+      rideCompleteEvent.set('DeviceId__c', DEVICEID);
+      org.insert({
+        sobject: rideCompleteEvent
       },
-      10000
+        function (err, resp) {
+          if (err) return console.log(err);
+          console.log('Ride Complete platform event created ' + resp.id);
+        });
+
+      startIdleTimer();
+
+    },
+    10000
   );
 
 }
 
 //===================================
-// HTTP handlers
+// HTTP handlers (only used for testing)
 //===================================
 // HTTP Get handler /
 // Renders the default page.  Mainly for testing.
@@ -275,17 +283,17 @@ app.get('/', function (request, response) {
 // Query Parameters:
 //   floor  -  The floor to move to
 app.get('/TakeRiderToFloor', function (request, response) {
-    // Stop the idle timer
-    stopIdleTimer();
-        
-    var floor = request.query.floor;
-    console.log('Moving elevator from floor ' + currentFloor + ' to floor ' + floor);
+  // Stop the idle timer
+  stopIdleTimer();
 
-    moveElevatorToFloor(floor);
+  var floor = request.query.floor;
+  console.log('Moving elevator from floor ' + currentFloor + ' to floor ' + floor);
 
-    startIdleTimer();
+  moveElevatorToFloor(floor);
 
-    response.send('Moved to floor ' + floor);
+  startIdleTimer();
+
+  response.send('Moved to floor ' + floor);
 });
 
 // HTTP Get handler /riderThisWayCometh
@@ -293,16 +301,16 @@ app.get('/TakeRiderToFloor', function (request, response) {
 // Query Parameters:
 //   none
 app.get('/riderThisWayCometh', function (request, response) {
-    // Stop the idle timer
-    stopIdleTimer();
-    moveElevatorToFloor(1);
-    
-    
-    console.log('A rider has approached the elevator');
+  // Stop the idle timer
+  stopIdleTimer();
+  moveElevatorToFloor(1);
 
-    takePictureAndAlertIoT();
 
-    response.send('A rider has approached the elevator');
+  console.log('A rider has approached the elevator');
+
+  takePictureAndAlertIoT();
+
+  response.send('A rider has approached the elevator');
 });
 
 app.listen(app.get('port'), function () {
