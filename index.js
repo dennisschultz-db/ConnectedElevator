@@ -1,5 +1,8 @@
 // donenv - Read environment variables from .env file
-require('dotenv').load();
+var dotenv = require('dotenv');
+// Needed for crontab to find .env file
+dotenv.config({path: '/home/pi/ConnectedElevator/.env'});
+dotenv.load();
 
 // Raspicam - Raspberry Pi Camera
 const Raspistill = require('node-raspistill').Raspistill;
@@ -30,8 +33,8 @@ var nforce = require('nforce');
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const USERNAME = process.env.USERNAME;
-const PASSWORD = process.env.PASSWORD;
+const USERNAME = process.env.SFUSERNAME;
+const PASSWORD = process.env.SFPASSWORD;
 const SECURITY_TOKEN = process.env.SECURITY_TOKEN;
 const DEVICEID = 'ELEVATOR-001';
 
