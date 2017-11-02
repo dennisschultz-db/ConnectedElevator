@@ -1,9 +1,13 @@
+// donenv - Read environment variables from .env file
+require('dotenv').load();
+
 // Raspicam - Raspberry Pi Camera
 const Raspistill = require('node-raspistill').Raspistill;
 const camera = new Raspistill({
-  verticalFlip: true,
+  verticalFlip: false,
   width: 1296,
-  height: 972
+  height: 972,
+  time: 1000
 });
 
 // GPIO - General Purpose I/O pin control
@@ -24,11 +28,11 @@ var app = express();
 var nforce = require('nforce');
 
 
-const CLIENT_ID = '3MVG9uGEVv_svxtIAJy0oab3RtzAW6WYWMT3qcNj4xx3homKaAx8.5JR82OJbLyKw3ec8w.wsv4w2MBtQRONn';
-const CLIENT_SECRET = '1894084629980817521';
-const USERNAME = 'dschultz@legoland.demo';
-const PASSWORD = 'salesforce1';
-const SECURITY_TOKEN = '6ypT5cibV39z9JdAG6s6HUJJ';
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const USERNAME = process.env.USERNAME;
+const PASSWORD = process.env.PASSWORD;
+const SECURITY_TOKEN = process.env.SECURITY_TOKEN;
 const DEVICEID = 'ELEVATOR-001';
 
 const AUTH_URL = 'https://login.salesforce.com/services/oauth2/token';
@@ -101,9 +105,7 @@ app.use(express.static(__dirname + '/public'));
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 
-// Initialize system
-configureGPIO();
-startIdleTimer();
+
 
 //==============================================================
 // local functions
@@ -116,7 +118,7 @@ function configureGPIO() {
 }
 
 function startIdleTimer() {
-  console.log('Idle motion');
+  console.log('Idle Timer Started');
   idleTimer = setInterval(function () {
     moveElevatorToRandomFloor()
   },
@@ -124,12 +126,12 @@ function startIdleTimer() {
 }
 
 function stopIdleTimer() {
-  console.log('Stopping idle motion');
+  console.log('Idle Timer Stopped');
   clearInterval(idleTimer);
 }
 
 function stopFloorIntervalTimer() {
-  console.log('Stopping Floor Interval Timers');
+  console.log('Stopping all Floor Interval Timers: ' + floorIntervalTimers.length);
   for (var i = 0; i < floorIntervalTimers.length; i++) {
     clearTimeout(floorIntervalTimers[i]);
   }
@@ -225,6 +227,8 @@ function takePictureAndAlertIoT() {
 //===================================
 // Event handler fired when a MotionDetected Platform Event is detected
 function onMotionDetected(m) {
+  // Stop the floor interval timer
+  stopFloorIntervalTimer();
   // Stop the idle timer
   stopIdleTimer();
   moveElevatorToFloor(1);
@@ -316,3 +320,10 @@ app.get('/riderThisWayCometh', function (request, response) {
 app.listen(app.get('port'), function () {
   console.log('Node app is running on port', app.get('port'));
 });
+
+//===================================
+// Initialize system
+//===================================
+configureGPIO();
+startIdleTimer();
+
