@@ -254,7 +254,7 @@ function onTakeRiderToFloor(m) {
   console.log('Taking rider from floor ' + currentFloor + ' to floor ' + floor);
   moveElevatorToFloor(floor);
 
-  // Wait 10 sec, then tell the Orchestration we are done.
+  // Wait 30 sec, then tell the Orchestration we are done.
   setTimeout(
     function () {
       // Create the platform event
@@ -271,7 +271,7 @@ function onTakeRiderToFloor(m) {
       startIdleTimer();
 
     },
-    10000
+    30000
   );
 
 }
