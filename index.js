@@ -148,6 +148,14 @@ function stopEndOfRideTimer() {
   clearTimeout(endOfRideTimer);
 }
 
+function stopAllTimers() {
+  stopEndOfRideTimer();
+  // Stop the floor interval timer
+  stopFloorIntervalTimer();
+  // Stop the idle timer
+  stopIdleTimer();
+}
+
 function moveElevatorToRandomFloor() {
   var newFloor = Math.floor(Math.random() * FLOORS.length) + 1;
   console.log('Randomly moving elevator to floor ' + newFloor);
@@ -236,12 +244,9 @@ function takePictureAndAlertIoT() {
 //===================================
 // Event handler fired when a MotionDetected Platform Event is detected
 function onMotionDetected(m) {
-  // Stop the end of ride timer
-  stopEndOfRideTimer();
-  // Stop the floor interval timer
-  stopFloorIntervalTimer();
-  // Stop the idle timer
-  stopIdleTimer();
+  // Stop all timers
+  stopAllTimers();
+
   moveElevatorToFloor(1);
 
   var dataFromServer = m.data;
@@ -251,12 +256,10 @@ function onMotionDetected(m) {
 
 // Event handler fired when the orchestration is commanding to have a rider transported
 function onTakeRiderToFloor(m) {
-  // Stop the floor interval timer
-  stopFloorIntervalTimer();
-  // Stop the idle timer
-  stopIdleTimer();
-
-  var dataFromServer = m.data
+  // Stop all timers
+  stopAllTimers();
+  
+  var dataFromServer = m.data;
   var floor = dataFromServer.payload.Floor__c;
 
   console.log('Taking rider from floor ' + currentFloor + ' to floor ' + floor);
@@ -298,9 +301,9 @@ app.get('/', function (request, response) {
 // Query Parameters:
 //   floor  -  The floor to move to
 app.get('/TakeRiderToFloor', function (request, response) {
-  // Stop the idle timer
-  stopIdleTimer();
-
+  // Stop all timers
+  stopAllTimers();
+    
   var floor = request.query.floor;
   console.log('Moving elevator from floor ' + currentFloor + ' to floor ' + floor);
 
@@ -316,8 +319,9 @@ app.get('/TakeRiderToFloor', function (request, response) {
 // Query Parameters:
 //   none
 app.get('/riderThisWayCometh', function (request, response) {
-  // Stop the idle timer
-  stopIdleTimer();
+  // Stop all timers
+  stopAllTimers();
+  
   moveElevatorToFloor(1);
 
 
