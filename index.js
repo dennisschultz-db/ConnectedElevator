@@ -55,6 +55,7 @@ var currentFloor = 1;
 const idleInterval = 10000;
 var floorIntervalTimers = [];
 var idleTimer;
+var endOfRideTimer;
 
 // Create a connection to the IoT Explorer Salesforce org
 var org = nforce.createConnection({
@@ -140,6 +141,11 @@ function stopFloorIntervalTimer() {
   }
   //reset timer array
   floorIntervalTimers = [];
+}
+
+function stopEndOfRideTimer() {
+  console.log('EndOfRide Timer Stopped');
+  clearTimeout(endOfRideTimer);
 }
 
 function moveElevatorToRandomFloor() {
@@ -230,6 +236,8 @@ function takePictureAndAlertIoT() {
 //===================================
 // Event handler fired when a MotionDetected Platform Event is detected
 function onMotionDetected(m) {
+  // Stop the end of ride timer
+  stopEndOfRideTimer();
   // Stop the floor interval timer
   stopFloorIntervalTimer();
   // Stop the idle timer
@@ -255,7 +263,7 @@ function onTakeRiderToFloor(m) {
   moveElevatorToFloor(floor);
 
   // Wait 30 sec, then tell the Orchestration we are done.
-  setTimeout(
+  endOfRideTimer = setTimeout(
     function () {
       // Create the platform event
       var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
