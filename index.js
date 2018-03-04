@@ -165,6 +165,18 @@ function moveElevatorToRandomFloor() {
 function setFloor(floor, state) {
   // FLOORS is a zero-based array, so subtract one from floor.
   gpio.write(FLOORS[floor - 1], state);
+
+  // Send an event to update the floor indicator in the Lighting UI
+  var currentFloorEvent = nforce.createSObject('CurrentFloor__e');
+  currentFloorEvent.set('DeviceId__c', DEVICEID);
+  currentFloorEvent.set('Floor__c', floor);
+  org.insert({
+    sobject: currentFloorEvent
+  },
+    function (err, resp) {
+      if (err) return console.log(err);
+      console.log('CurrentFloor platform event created ' + resp.id);
+    });
 }
 
 function moveElevatorToFloor(floor) {
