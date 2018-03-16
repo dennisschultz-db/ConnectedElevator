@@ -47,7 +47,7 @@ const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 
 // Mapping of floors to WiringPi pin numbers of LEDs
-const FLOORS = [21, 23, 27, 29, 31, 33, 35, 37];
+const FLOORS = [19, 21, 23, 29, 31, 33, 35, 37];
 const photoFilename = 'legoPhoto.jpg';
 
 // Current location of elevator
