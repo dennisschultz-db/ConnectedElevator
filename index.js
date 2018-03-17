@@ -16,6 +16,12 @@ const camera = new Raspistill({
 // GPIO - General Purpose I/O pin control
 var gpio = require('rpi-gpio');
 
+// Raspi-Sonar for distance measurement
+var Sonar = require('raspi-sonar').Sonar;
+var sonarPin1 = new Sonar(29);
+var readingTimer;
+const readingTimeout = 3000;
+
 // Cometd libraries enable subscription to Platform Events
 var cometdnodejs = require('cometd-nodejs-client').adapt();
 var cometdlib = require('cometd');
@@ -46,8 +52,10 @@ var salesforce_url;
 const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 
-// Mapping of floors to WiringPi pin numbers of LEDs
-const FLOORS = [19, 21, 23, 29, 31, 33, 35, 37];
+// Motor control pins
+const UP_GPIO = 1;
+const DOWN_GPIO = 2;
+
 const photoFilename = 'legoPhoto.jpg';
 
 // Current location of elevator
@@ -114,11 +122,42 @@ app.set('view engine', 'ejs');
 //==============================================================
 // local functions
 function configureGPIO() {
-  for (i = 0; i < 8; i++) {
-    gpio.setup(FLOORS[i], gpio.DIR_OUT, function () {
-      gpio.write(FLOORS[0], 1);
-    });
-  }
+  gpio.setup(UP_GPIO, gpio.DIR_OUT, function () {
+    gpio.write(UP_GPIO, 0);
+  });
+  gpio.setup(DOWN_GPIO, gpio.DIR_OUT, function () {
+    gpio.write(DOWN_GPIO, 0);
+  });
+}
+
+function motorUp() {
+  gpio.write(UP_GPIO, 1);
+  gpio.write(DOWN_GPIO, 0);
+}
+
+function motorDown() {
+  gpio.write(DOWN_GPIO, 1);
+  gpio.write(UP_GPIO, 0);
+}
+
+function motorStop() {
+  gpio.write(UP_GPIO, 0);
+  gpio.write(DOWN_GPIO, 0);
+}
+
+function readDistance() {
+  sonarPin1.read(function(duration) {
+    var distance = 343.0 * duration / 10000 * .5;
+    console.log('duration: ' + duration + ' distance: ' + distance + ' cm');
+  });  
+}
+
+function startReadingTimer() {
+  console.log('Reading Timer Started');
+  readingTimer = setInterval(function() {
+    readDistance()
+  },
+    readingTimeout);
 }
 
 function startIdleTimer() {
@@ -164,7 +203,7 @@ function moveElevatorToRandomFloor() {
 
 function setFloor(floor, state) {
   // FLOORS is a zero-based array, so subtract one from floor.
-  gpio.write(FLOORS[floor - 1], state);
+//  gpio.write(FLOORS[floor - 1], state);
 
   if (state) {
     // Send an event to update the floor indicator in the Lighting UI
@@ -304,10 +343,6 @@ function onTakeRiderToFloor(m) {
 // HTTP handlers (only used for testing)
 //===================================
 // HTTP Get handler /
-// Renders the default page.  Mainly for testing.
-app.get('/', function (request, response) {
-  response.render('pages/index');
-});
 
 // HTTP Get handler /TakeRiderToFloor
 // Moves the elevator to the desired floor
@@ -349,9 +384,23 @@ app.listen(app.get('port'), function () {
   console.log('Node app is running on port', app.get('port'));
 });
 
+app.get('/Up', function (request, response) {
+  motorUp();
+});
+
+app.get('/Down', function (request, response) {
+  motorDown();
+});
+
+app.get('/Stop', function (request, response) {
+  motorStop();
+});
+
+
 //===================================
 // Initialize system
 //===================================
 configureGPIO();
-startIdleTimer();
+//startIdleTimer();
+startReadingTimer();
 
