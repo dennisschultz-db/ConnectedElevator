@@ -15,6 +15,7 @@ const camera = new Raspistill({
 
 // GPIO - General Purpose I/O pin control
 var gpio = require('rpi-gpio');
+// Debounce "Motion Detected" hardware button
 var debounce = require('debounce');
 
 // Cometd libraries enable subscription to Platform Events
@@ -31,7 +32,7 @@ var app = express();
 // NForce - simplifies authtentication with Salesforce
 var nforce = require('nforce');
 
-
+// Retrieve connection info from environment file
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const USERNAME = process.env.SFUSERNAME;
@@ -120,6 +121,9 @@ app.set('view engine', 'ejs');
 function configureGPIO() {
   // motion sensor switch
   gpio.setup(MOTION, gpio.DIR_IN, gpio.EDGE_RISING);
+  // when a GPIO input state change has stablized for one second,
+  // handle it.
+  gpio.on('change', debounce(motion,1000));
 
  // Floor controller pins
   for (i = 0; i < 8; i++) {
@@ -259,6 +263,29 @@ function takePictureAndAlertIoT() {
   });
 };
 
+// Handler for state change on input pins
+// If this is the rising edge (release of switch)
+// create a platform event.  Since we already have a handler
+// for this event (in the case when it is invoked from the
+// Salesforce UI), we don't act upon it here.
+var motion = function(channel, value) {
+  console.log('channel ' + channel + ' value is now ' + value );
+  if ((channel == MOTION) && (value)) {
+
+    // Create the platform event
+    var motionEvent = nforce.createSObject('MotionDetected__e');
+      motionEvent.set('DeviceId__c', DEVICEID);
+      org.insert({
+        sobject: motionEvent
+      },
+        function (err, resp) {
+          if (err) return console.log(err);
+          console.log('Motion Detected platform event created ' + resp.id);
+        });
+
+  }
+};
+
 
 //===================================
 // Platform Event handlers
@@ -361,23 +388,3 @@ app.listen(app.get('port'), function () {
 //===================================
 configureGPIO();
 startIdleTimer();
-
-var motion = function(channel, value) {
-  console.log('channel ' + channel + ' value is now ' + value );
-  if ((channel == MOTION) && (value)) {
-
-    // Create the platform event
-    var motionEvent = nforce.createSObject('MotionDetected__e');
-      motionEvent.set('DeviceId__c', DEVICEID);
-      org.insert({
-        sobject: motionEvent
-      },
-        function (err, resp) {
-          if (err) return console.log(err);
-          console.log('Motion Detected platform event created ' + resp.id);
-        });
-
-  }
-};
-
-gpio.on('change', debounce(motion,1000));
