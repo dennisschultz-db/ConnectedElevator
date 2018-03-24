@@ -15,6 +15,7 @@ const camera = new Raspistill({
 
 // GPIO - General Purpose I/O pin control
 var gpio = require('rpi-gpio');
+var debounce = require('debounce');
 
 // Cometd libraries enable subscription to Platform Events
 var cometdnodejs = require('cometd-nodejs-client').adapt();
@@ -49,6 +50,9 @@ const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 // Mapping of floors to WiringPi pin numbers of LEDs
 const FLOORS = [19, 21, 23, 29, 31, 33, 35, 37];
 const photoFilename = 'legoPhoto.jpg';
+
+// Motion Detected button
+const MOTION = 36;
 
 // Current location of elevator
 var currentFloor = 1;
@@ -114,6 +118,10 @@ app.set('view engine', 'ejs');
 //==============================================================
 // local functions
 function configureGPIO() {
+  // motion sensor switch
+  gpio.setup(MOTION, gpio.DIR_IN, gpio.EDGE_RISING);
+
+ // Floor controller pins
   for (i = 0; i < 8; i++) {
     gpio.setup(FLOORS[i], gpio.DIR_OUT, function () {
       gpio.write(FLOORS[0], 1);
@@ -262,7 +270,6 @@ function onMotionDetected(m) {
 
   moveElevatorToFloor(1);
 
-  var dataFromServer = m.data;
   console.log('Motion has been detected.  Initiating picture cycle');
   takePictureAndAlertIoT();
 }
@@ -355,3 +362,22 @@ app.listen(app.get('port'), function () {
 configureGPIO();
 startIdleTimer();
 
+var motion = function(channel, value) {
+  console.log('channel ' + channel + ' value is now ' + value );
+  if ((channel == MOTION) && (value)) {
+
+    // Create the platform event
+    var motionEvent = nforce.createSObject('MotionDetected__e');
+      motionEvent.set('DeviceId__c', DEVICEID);
+      org.insert({
+        sobject: motionEvent
+      },
+        function (err, resp) {
+          if (err) return console.log(err);
+          console.log('Motion Detected platform event created ' + resp.id);
+        });
+
+  }
+};
+
+gpio.on('change', debounce(motion,1000));
