@@ -53,8 +53,8 @@ const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 
 // Motor control pins
-const UP_GPIO = 1;
-const DOWN_GPIO = 2;
+const UP_GPIO = 37;
+const DOWN_GPIO = 38;
 
 const photoFilename = 'legoPhoto.jpg';
 
@@ -386,15 +386,50 @@ app.listen(app.get('port'), function () {
 
 app.get('/Up', function (request, response) {
   motorUp();
+  response.send('Going Up');
 });
 
 app.get('/Down', function (request, response) {
   motorDown();
+  response.send('Going Down');
 });
 
 app.get('/Stop', function (request, response) {
   motorStop();
+  response.send('Stopped');
 });
+
+app.get('/UpOneFloor', function (request, response) {
+
+  motorUp();
+
+  setTimeout(
+    function () {
+      motorStop();
+      response.send('stopped');
+    },
+    1875
+  )
+
+
+});
+
+app.get('/DownOneFloor', function (request, response) {
+  
+  motorDown();
+  
+  setTimeout(
+    function () {
+      motorStop();
+      response.send('stopped');
+    },
+    1800
+  )
+
+  
+});
+
+
 
 
 //===================================
