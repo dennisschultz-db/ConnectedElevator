@@ -15,12 +15,8 @@ const camera = new Raspistill({
 
 // GPIO - General Purpose I/O pin control
 var gpio = require('rpi-gpio');
-
-// Raspi-Sonar for distance measurement
-var Sonar = require('raspi-sonar').Sonar;
-var sonarPin1 = new Sonar(29);
-var readingTimer;
-const readingTimeout = 3000;
+// Debounce "Motion Detected" hardware button
+var debounce = require('debounce');
 
 // Cometd libraries enable subscription to Platform Events
 var cometdnodejs = require('cometd-nodejs-client').adapt();
@@ -53,13 +49,19 @@ const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 
 // Motor control pins
-const UP_GPIO = 37;
+const UP_GPIO = 36;
 const DOWN_GPIO = 38;
+// Mapping of floors to WiringPi pin numbers of LEDs
+const FLOORS = [19, 21, 23, 29, 31, 33, 35, 37];
+// Motion Detected button
+const MOTION = 36;
 
 const photoFilename = 'legoPhoto.jpg';
 
 // Current location of elevator
 var currentFloor = 1;
+var destinationFloor;
+var elevatorState = "STOPPED";
 const idleInterval = 10000;
 var floorIntervalTimers = [];
 var idleTimer;
@@ -90,7 +92,7 @@ org.authenticate({
 
   // Configure the CometD object.
   cometd.configure({
-    url: salesforce_url + '/cometd/40.0/',
+    url: salesforce_url + '/cometd/41.0/',
     requestHeaders: { Authorization: 'Bearer ' + access_token },
     appendMessageTypeToURL: false
   });
@@ -122,42 +124,45 @@ app.set('view engine', 'ejs');
 //==============================================================
 // local functions
 function configureGPIO() {
+  // motion sensor switch
+  gpio.setup(MOTION, gpio.DIR_IN, gpio.EDGE_RISING);
+  // when a GPIO input state change has stablized for one second,
+  // handle it.
+  gpio.on('change', debounce(motion,1000));
+
+  // Motor controller pins
   gpio.setup(UP_GPIO, gpio.DIR_OUT, function () {
     gpio.write(UP_GPIO, 0);
   });
   gpio.setup(DOWN_GPIO, gpio.DIR_OUT, function () {
     gpio.write(DOWN_GPIO, 0);
   });
+
+  // Floor sensing pins
+  for (i = 0; i < 8; i++) {
+    gpio.setup(FLOORS[i], gpio.DIR_IN, gpio.EDGE_RISING);
+  }
 }
 
+// Send the elevator up
 function motorUp() {
+  elevatorState = "UP";
   gpio.write(UP_GPIO, 1);
   gpio.write(DOWN_GPIO, 0);
 }
 
+// Send the elevator down
 function motorDown() {
+  elevatorState = "DOWN";
   gpio.write(DOWN_GPIO, 1);
   gpio.write(UP_GPIO, 0);
 }
 
+// Stop the elevator motion
 function motorStop() {
+  elevatorState = "STOPPED";
   gpio.write(UP_GPIO, 0);
   gpio.write(DOWN_GPIO, 0);
-}
-
-function readDistance() {
-  sonarPin1.read(function(duration) {
-    var distance = 343.0 * duration / 10000 * .5;
-    console.log('duration: ' + duration + ' distance: ' + distance + ' cm');
-  });  
-}
-
-function startReadingTimer() {
-  console.log('Reading Timer Started');
-  readingTimer = setInterval(function() {
-    readDistance()
-  },
-    readingTimeout);
 }
 
 function startIdleTimer() {
@@ -201,55 +206,27 @@ function moveElevatorToRandomFloor() {
   moveElevatorToFloor(newFloor);
 }
 
-function setFloor(floor, state) {
-  // FLOORS is a zero-based array, so subtract one from floor.
-//  gpio.write(FLOORS[floor - 1], state);
-
-  if (state) {
-    // Send an event to update the floor indicator in the Lighting UI
-    var currentFloorEvent = nforce.createSObject('CurrentFloor__e');
-    currentFloorEvent.set('DeviceId__c', DEVICEID);
-    currentFloorEvent.set('Floor__c', floor);
-    org.insert({
-      sobject: currentFloorEvent
-    },
-      function (err, resp) {
-        if (err) return console.log(err);
-      });
-  }
+function setFloor(floor) {
+  // Send an event to update the floor indicator in the Lighting UI
+  var currentFloorEvent = nforce.createSObject('CurrentFloor__e');
+  currentFloorEvent.set('DeviceId__c', DEVICEID);
+  currentFloorEvent.set('Floor__c', floor);
+  org.insert({sobject: currentFloorEvent},
+    function (err, resp) {
+      if (err) return console.log(err);
+    });
 }
 
 function moveElevatorToFloor(floor) {
+  destinationFloor = floor;
   if (currentFloor < floor) {
     // Going up
-    currentFloor++;
-    console.log('... floor ' + currentFloor);
-    setFloor(currentFloor - 1, 0);
-    setFloor(currentFloor, 1);
-    floorIntervalTimers.push(
-      setTimeout(
-        function () {
-          moveElevatorToFloor(floor);
-        },
-        1000
-      )
-    );
+    motorUp();
   };
 
   if (currentFloor > floor) {
     // Going down
-    currentFloor--;
-    console.log('... floor ' + currentFloor);
-    setFloor(currentFloor + 1, 0);
-    setFloor(currentFloor, 1);
-    floorIntervalTimers.push(
-      setTimeout(
-        function () {
-          moveElevatorToFloor(floor);
-        },
-        1000
-      )
-    );
+    motorDown();
   };
 
 };
@@ -290,6 +267,40 @@ function takePictureAndAlertIoT() {
   });
 };
 
+// Handler for state change on input pins
+// If this is the rising edge (release of switch)
+// create a platform event.  Since we already have a handler
+// for this event (in the case when it is invoked from the
+// Salesforce UI), we don't act upon it here.
+var motion = function(channel, value) {
+  console.log('channel ' + channel + ' value is now ' + value );
+
+  // Motion detected
+  if ((channel == MOTION) && (value)) {
+    // Create the platform event
+    var motionEvent = nforce.createSObject('MotionDetected__e');
+      motionEvent.set('DeviceId__c', DEVICEID);
+      org.insert({
+        sobject: motionEvent
+      },
+        function (err, resp) {
+          if (err) return console.log(err);
+          console.log('Motion Detected platform event created ' + resp.id);
+        });
+
+  } else if (FLOORS.includes(channel) ) {
+    // Elevator is approaching a floor
+    // FLOORS is a zero-based array, so add one.
+    currentFloor = FLOORS.indexOf(channel) + 1;
+    setFloor(currentFloor);
+    // If the motor is running, stop it if the elevator is at or past
+    // the destination floor
+    if ( ((elevatorState == "UP") && (currentFloor >= destinationFloor)) ||
+         ((elevatorState == "DOWN") && (currentFloor <= destinationFloor)) ) {
+      motorStop();
+    }
+  }
+};
 
 //===================================
 // Platform Event handlers
@@ -342,7 +353,6 @@ function onTakeRiderToFloor(m) {
 //===================================
 // HTTP handlers (only used for testing)
 //===================================
-// HTTP Get handler /
 
 // HTTP Get handler /TakeRiderToFloor
 // Moves the elevator to the desired floor
@@ -366,22 +376,17 @@ app.get('/TakeRiderToFloor', function (request, response) {
 // Triggers the photo process.  This simulates a motion detecting camera
 // Query Parameters:
 //   none
-app.get('/riderThisWayCometh', function (request, response) {
+app.get('/riderDetected', function (request, response) {
   // Stop all timers
   stopAllTimers();
   
   moveElevatorToFloor(1);
-
 
   console.log('A rider has approached the elevator');
 
   takePictureAndAlertIoT();
 
   response.send('A rider has approached the elevator');
-});
-
-app.listen(app.get('port'), function () {
-  console.log('Node app is running on port', app.get('port'));
 });
 
 app.get('/Up', function (request, response) {
@@ -410,8 +415,6 @@ app.get('/UpOneFloor', function (request, response) {
     },
     1875
   )
-
-
 });
 
 app.get('/DownOneFloor', function (request, response) {
@@ -424,9 +427,7 @@ app.get('/DownOneFloor', function (request, response) {
       response.send('stopped');
     },
     1800
-  )
-
-  
+  )  
 });
 
 
@@ -435,6 +436,10 @@ app.get('/DownOneFloor', function (request, response) {
 //===================================
 // Initialize system
 //===================================
+app.listen(app.get('port'), function () {
+  console.log('Node app is running on port', app.get('port'));
+});
+
 configureGPIO();
 //startIdleTimer();
 startReadingTimer();
