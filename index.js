@@ -49,10 +49,10 @@ const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
 
 // Motor control pins
-const UP_GPIO = 36;
-const DOWN_GPIO = 38;
+const UP_GPIO = 38;
+const DOWN_GPIO = 40;
 // Mapping of floors to WiringPi pin numbers of LEDs
-const FLOORS = [19, 21, 23, 29, 31, 33, 35, 37];
+const FLOORS = [37, 35, 33, 31, 29, 23, 21, 19];
 // Motion Detected button
 const MOTION = 36;
 
@@ -131,9 +131,7 @@ function configureGPIO() {
   gpio.on('change', debounce(motion,1000));
 
   // Motor controller pins
-  gpio.setup(UP_GPIO, gpio.DIR_OUT, function () {
-    gpio.write(UP_GPIO, 0);
-  });
+  gpio.setup(UP_GPIO, gpio.DIR_OUT);
   gpio.setup(DOWN_GPIO, gpio.DIR_OUT, function () {
     gpio.write(DOWN_GPIO, 0);
   });
@@ -219,6 +217,10 @@ function setFloor(floor) {
 
 function moveElevatorToFloor(floor) {
   destinationFloor = floor;
+  console.log('moveElevatorToFloor ');
+  console.log('currentFloor ' + currentFloor);
+  console.log('destinationFloor ' + destinationFloor);
+  
   if (currentFloor < floor) {
     // Going up
     motorUp();
@@ -292,6 +294,7 @@ var motion = function(channel, value) {
     // Elevator is approaching a floor
     // FLOORS is a zero-based array, so add one.
     currentFloor = FLOORS.indexOf(channel) + 1;
+    console.log(elevatorState + ' currentFloor ' + currentFloor + ' destinationFloor ' + destinationFloor);
     setFloor(currentFloor);
     // If the motor is running, stop it if the elevator is at or past
     // the destination floor
@@ -342,7 +345,7 @@ function onTakeRiderToFloor(m) {
           console.log('Ride Complete platform event created ' + resp.id);
         });
 
-      startIdleTimer();
+//      startIdleTimer();
 
     },
     30000
@@ -367,7 +370,7 @@ app.get('/TakeRiderToFloor', function (request, response) {
 
   moveElevatorToFloor(floor);
 
-  startIdleTimer();
+//  startIdleTimer();
 
   response.send('Moved to floor ' + floor);
 });
@@ -442,5 +445,4 @@ app.listen(app.get('port'), function () {
 
 configureGPIO();
 //startIdleTimer();
-startReadingTimer();
 
