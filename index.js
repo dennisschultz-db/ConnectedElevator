@@ -1,3 +1,24 @@
+// Motor control pins
+const UP_GPIO = 38;
+const DOWN_GPIO = 36;
+// Mapping of floors to WiringPi pin numbers of LEDs
+const FLOORS = [37, 35, 33, 31, 29, 23, 21, 19];
+// Motion Detected button
+const MOTION = 32;
+// Reset button
+//   pin 5
+// UART
+//   2 = +5V (only if powering by USB)
+//   6 - Black
+//   8 - White
+//   10 - Green
+// Ground
+//   pin 39
+
+// Amount of time to continue running the motor after
+// the floor level triggers
+const FLOOR_LAG = 1000;
+
 // donenv - Read environment variables from .env file
 var dotenv = require('dotenv');
 // Needed for crontab to find .env file
@@ -14,7 +35,7 @@ const camera = new Raspistill({
 });
 
 // GPIO - General Purpose I/O pin control
-var gpio = require('rpi-gpio');
+var rpio = require('rpio');
 // Debounce "Motion Detected" hardware button
 var debounce = require('debounce');
 
@@ -47,14 +68,6 @@ var salesforce_url;
 // Topic paths for the Platform Events
 const MOTION_DETECTED_TOPIC = '/event/MotionDetected__e';
 const TAKE_RIDER_TO_FLOOR_TOPIC = '/event/TakeRiderToFloor__e';
-
-// Motor control pins
-const UP_GPIO = 38;
-const DOWN_GPIO = 40;
-// Mapping of floors to WiringPi pin numbers of LEDs
-const FLOORS = [37, 35, 33, 31, 29, 23, 21, 19];
-// Motion Detected button
-const MOTION = 36;
 
 const photoFilename = 'legoPhoto.jpg';
 
@@ -124,43 +137,45 @@ app.set('view engine', 'ejs');
 //==============================================================
 // local functions
 function configureGPIO() {
+
+  rpio.init({gpiomem: true, mapping: 'physical'});
+  // Motor control pins
+  rpio.open(UP_GPIO, rpio.OUTPUT, rpio.LOW);
+  rpio.open(DOWN_GPIO, rpio.OUTPUT, rpio.LOW);
+
   // motion sensor switch
-  gpio.setup(MOTION, gpio.DIR_IN, gpio.EDGE_RISING);
+  rpio.open(MOTION, rpio.INPUT, rpio.PULL_DOWN);
   // when a GPIO input state change has stablized for one second,
   // handle it.
-  gpio.on('change', debounce(motion,1000));
-
-  // Motor controller pins
-  gpio.setup(UP_GPIO, gpio.DIR_OUT);
-  gpio.setup(DOWN_GPIO, gpio.DIR_OUT, function () {
-    gpio.write(DOWN_GPIO, 0);
-  });
+  rpio.poll(MOTION, debounce(motion, 1000), rpio.POLL_HIGH);
 
   // Floor sensing pins
-  for (i = 0; i < 8; i++) {
-    gpio.setup(FLOORS[i], gpio.DIR_IN, gpio.EDGE_RISING);
+  for (i=0; i < FLOORS.length; i++) {
+    rpio.open(FLOORS[i], rpio.INPUT, rpio.PULL_DOWN);
+    rpio.poll(FLOORS[i], debounce(motion, 500), rpio.POLL_HIGH);
   }
+
 }
 
 // Send the elevator up
 function motorUp() {
   elevatorState = "UP";
-  gpio.write(UP_GPIO, 1);
-  gpio.write(DOWN_GPIO, 0);
+  rpio.write(UP_GPIO, rpio.HIGH);
+  rpio.write(DOWN_GPIO, rpio.LOW);
 }
 
 // Send the elevator down
 function motorDown() {
   elevatorState = "DOWN";
-  gpio.write(DOWN_GPIO, 1);
-  gpio.write(UP_GPIO, 0);
+  rpio.write(DOWN_GPIO, rpio.HIGH);
+  rpio.write(UP_GPIO, rpio.LOW);
 }
 
 // Stop the elevator motion
 function motorStop() {
   elevatorState = "STOPPED";
-  gpio.write(UP_GPIO, 0);
-  gpio.write(DOWN_GPIO, 0);
+  rpio.write(UP_GPIO, rpio.LOW);
+  rpio.write(DOWN_GPIO, rpio.LOW);
 }
 
 function startIdleTimer() {
@@ -294,13 +309,18 @@ var motion = function(channel, value) {
     // Elevator is approaching a floor
     // FLOORS is a zero-based array, so add one.
     currentFloor = FLOORS.indexOf(channel) + 1;
-    console.log(elevatorState + ' currentFloor ' + currentFloor + ' destinationFloor ' + destinationFloor);
+    console.log(elevatorState + ' currentFloor = ' + currentFloor + ' destinationFloor = ' + destinationFloor);
     setFloor(currentFloor);
     // If the motor is running, stop it if the elevator is at or past
     // the destination floor
     if ( ((elevatorState == "UP") && (currentFloor >= destinationFloor)) ||
          ((elevatorState == "DOWN") && (currentFloor <= destinationFloor)) ) {
-      motorStop();
+      // The reed switch will trigger a little before the elevator gets to the floor.
+      // Run the elevator for a few seconds more.
+      setTimeout ( function() {
+          motorStop();
+        }
+        , FLOOR_LAG );
     }
   }
 };
