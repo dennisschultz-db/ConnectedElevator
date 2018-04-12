@@ -17,7 +17,7 @@ const MOTION = 32;
 
 // Amount of time to continue running the motor after
 // the floor level triggers
-const FLOOR_LAG = 1000;
+const FLOOR_LAG = 500;
 
 // donenv - Read environment variables from .env file
 var dotenv = require('dotenv');
@@ -75,7 +75,7 @@ const photoFilename = 'legoPhoto.jpg';
 var currentFloor = 1;
 var destinationFloor;
 var elevatorState = "STOPPED";
-const idleInterval = 10000;
+const idleInterval = 30000;
 var floorIntervalTimers = [];
 var idleTimer;
 var endOfRideTimer;
@@ -152,7 +152,13 @@ function configureGPIO() {
   // Floor sensing pins
   for (i=0; i < FLOORS.length; i++) {
     rpio.open(FLOORS[i], rpio.INPUT, rpio.PULL_DOWN);
-    rpio.poll(FLOORS[i], debounce(motion, 500), rpio.POLL_HIGH);
+    var boundMotion = (function(pin) {
+        motion(pin);
+    }).bind(this);
+
+    rpio.poll(FLOORS[i], 
+      debounce(boundMotion, 500),
+      rpio.POLL_HIGH);
   }
 
 }
@@ -289,11 +295,11 @@ function takePictureAndAlertIoT() {
 // create a platform event.  Since we already have a handler
 // for this event (in the case when it is invoked from the
 // Salesforce UI), we don't act upon it here.
-var motion = function(channel, value) {
-  console.log('channel ' + channel + ' value is now ' + value );
+var motion = function(channel) {
+  console.log('channel ' + channel + ' state has changed');
 
-  // Motion detected
-  if ((channel == MOTION) && (value)) {
+  // Motion detected if there is a state change and the pin is high
+  if ((channel == MOTION) && (rpio.read(MOTION))) {
     // Create the platform event
     var motionEvent = nforce.createSObject('MotionDetected__e');
       motionEvent.set('DeviceId__c', DEVICEID);
@@ -365,7 +371,7 @@ function onTakeRiderToFloor(m) {
           console.log('Ride Complete platform event created ' + resp.id);
         });
 
-//      startIdleTimer();
+      startIdleTimer();
 
     },
     30000
@@ -390,7 +396,7 @@ app.get('/TakeRiderToFloor', function (request, response) {
 
   moveElevatorToFloor(floor);
 
-//  startIdleTimer();
+  startIdleTimer();
 
   response.send('Moved to floor ' + floor);
 });
@@ -427,32 +433,6 @@ app.get('/Stop', function (request, response) {
   response.send('Stopped');
 });
 
-app.get('/UpOneFloor', function (request, response) {
-
-  motorUp();
-
-  setTimeout(
-    function () {
-      motorStop();
-      response.send('stopped');
-    },
-    1875
-  )
-});
-
-app.get('/DownOneFloor', function (request, response) {
-  
-  motorDown();
-  
-  setTimeout(
-    function () {
-      motorStop();
-      response.send('stopped');
-    },
-    1800
-  )  
-});
-
 
 
 
@@ -464,5 +444,5 @@ app.listen(app.get('port'), function () {
 });
 
 configureGPIO();
-//startIdleTimer();
+startIdleTimer();
 
