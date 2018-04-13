@@ -80,51 +80,6 @@ var floorIntervalTimers = [];
 var idleTimer;
 var endOfRideTimer;
 
-// Create a connection to the IoT Explorer Salesforce org
-var org = nforce.createConnection({
-  clientId: CLIENT_ID,
-  clientSecret: CLIENT_SECRET,
-  redirectUri: 'http://localhost:5000/oauth/_callback',
-  mode: 'single',
-  autoRefresh: true
-});
-
-// Authenticate to the org
-org.authenticate({
-  username: USERNAME,
-  password: PASSWORD,
-  securityToken: SECURITY_TOKEN
-}, function (err, resp) {
-  if (err) {
-    return console.error('Unable to get security token');
-  }
-  access_token = resp.access_token;
-  salesforce_url = resp.instance_url;
-  console.log('Access token ' + access_token);
-  console.log('Salesforce URL ' + salesforce_url);
-
-  // Configure the CometD object.
-  cometd.configure({
-    url: salesforce_url + '/cometd/41.0/',
-    requestHeaders: { Authorization: 'Bearer ' + access_token },
-    appendMessageTypeToURL: false
-  });
-
-  // Handshake with the server and subscribe to the PE.
-  cometd.handshake(function (h) {
-    if (h.successful) {
-      // Subscribe to receive messages from the server.
-      cometd.subscribe(MOTION_DETECTED_TOPIC, onMotionDetected);
-      console.log('Cometd subscribed to ' + MOTION_DETECTED_TOPIC + ' successfully');
-      cometd.subscribe(TAKE_RIDER_TO_FLOOR_TOPIC, onTakeRiderToFloor);
-      console.log('Cometd subscribed to ' + TAKE_RIDER_TO_FLOOR_TOPIC + ' successfully');
-    } else {
-      console.log('Unable to connect to cometd ' + JSON.stringify(h));
-    }
-  });
-});
-
-
 // Configure the app for HTTP
 app.set('port', (process.env.PORT || 5000));
 app.use(express.static(__dirname + '/public'));
@@ -443,6 +398,56 @@ app.listen(app.get('port'), function () {
   console.log('Node app is running on port', app.get('port'));
 });
 
-configureGPIO();
-startIdleTimer();
+// Create a connection to the IoT Explorer Salesforce org
+var org = nforce.createConnection({
+  clientId: CLIENT_ID,
+  clientSecret: CLIENT_SECRET,
+  redirectUri: 'http://localhost:5000/oauth/_callback',
+  mode: 'single',
+  autoRefresh: true
+});
+
+// Authenticate to the org
+org.authenticate({
+  username: USERNAME,
+  password: PASSWORD,
+  securityToken: SECURITY_TOKEN
+}, function (err, resp) {
+  if (err) {
+    return console.error('Unable to get security token');
+  }
+  access_token = resp.access_token;
+  salesforce_url = resp.instance_url;
+  console.log('Access token ' + access_token);
+  console.log('Salesforce URL ' + salesforce_url);
+
+  // Configure the CometD object.
+  cometd.configure({
+    url: salesforce_url + '/cometd/41.0/',
+    requestHeaders: { Authorization: 'Bearer ' + access_token },
+    appendMessageTypeToURL: false
+  });
+
+  // Handshake with the server and subscribe to the PE.
+  cometd.handshake(function (h) {
+    if (h.successful) {
+      // Subscribe to receive messages from the server.
+      cometd.subscribe(MOTION_DETECTED_TOPIC, onMotionDetected);
+      console.log('Cometd subscribed to ' + MOTION_DETECTED_TOPIC + ' successfully');
+      cometd.subscribe(TAKE_RIDER_TO_FLOOR_TOPIC, onTakeRiderToFloor);
+      console.log('Cometd subscribed to ' + TAKE_RIDER_TO_FLOOR_TOPIC + ' successfully');
+
+      // Initialize hardware and get this party started!
+      configureGPIO();
+      startIdleTimer();
+      
+    } else {
+      console.log('Unable to connect to cometd ' + JSON.stringify(h));
+    }
+  });
+});
+
+
+
+
 
