@@ -104,12 +104,21 @@ function configureGPIO() {
   // handle it.
   rpio.poll(MOTION, debounce(motion, 1000), rpio.POLL_HIGH);
 
+  // Wrap the state change handler that will be used as a callback
+  var boundMotion = (function(pin) {
+        motion(pin);
+  }).bind(this);
+
+
   // Floor sensing pins
   for (i=0; i < FLOORS.length; i++) {
     rpio.open(FLOORS[i], rpio.INPUT, rpio.PULL_DOWN);
-    var boundMotion = (function(pin) {
-        motion(pin);
-    }).bind(this);
+
+    // Read the pin and set the current floor accordinly
+    if (rpio.read(FLOORS[i])) {
+      currentFloor = i + 1;
+      console.log('Elevator is starting on floor ' + currentFloor);
+    }
 
     rpio.poll(FLOORS[i], 
       debounce(boundMotion, 500),
