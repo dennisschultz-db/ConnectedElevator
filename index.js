@@ -5,6 +5,8 @@ const DOWN_GPIO = 36;
 const FLOORS = [37, 35, 33, 31, 29, 23, 21, 19];
 // Motion Detected button
 const MOTION = 32;
+// Red LED
+const LED = 28;
 // Reset button
 //   pin 5
 // UART
@@ -79,6 +81,9 @@ const idleInterval = 30000;
 var floorIntervalTimers = [];
 var idleTimer;
 var endOfRideTimer;
+var haveBreakdown = false;
+var ledState = rpio.LOW;
+var ledTimer;
 
 // Configure the app for HTTP
 app.set('port', (process.env.PORT || 5000));
@@ -125,6 +130,8 @@ function configureGPIO() {
       rpio.POLL_HIGH);
   }
 
+  rpio.open(LED, rpio.OUTPUT, rpio.LOW);
+
 }
 
 // Send the elevator up
@@ -146,6 +153,23 @@ function motorStop() {
   elevatorState = "STOPPED";
   rpio.write(UP_GPIO, rpio.LOW);
   rpio.write(DOWN_GPIO, rpio.LOW);
+}
+
+function startLEDFlash() {
+  ledTimer = setInterval(function () {
+    if (ledState == rpio.LOW) {
+      ledState = rpio.HIGH;
+    } else {
+      ledState = rpio.LOW;
+    }
+    rpio.write(LED, ledState);
+  },
+    500 );
+}
+
+function stopLEDFlash() {
+  clearInterval(ledTimer);
+  ledState = rpio.LOW;
 }
 
 function startIdleTimer() {
@@ -187,6 +211,17 @@ function moveElevatorToRandomFloor() {
   var newFloor = Math.floor(Math.random() * FLOORS.length) + 1;
   console.log('Randomly moving elevator to floor ' + newFloor);
   moveElevatorToFloor(newFloor);
+}
+
+function setStatus(status) {
+  // Send an event to update the orchestration
+  var elevatorStatusEvent = nforce.createSObject('ElevatorStatus__e');
+  elevatorStatusEvent.set('DeviceId__c', DEVICEID);
+  elevatorStatusEvent.set('Status__c', status);
+  org.insert({sobject: elevatorStatusEvent},
+    function (err, resp) {
+      if (err) return console.log(err);
+    });
 }
 
 function setFloor(floor) {
@@ -281,6 +316,22 @@ var motion = function(channel) {
     currentFloor = FLOORS.indexOf(channel) + 1;
     console.log(elevatorState + ' currentFloor = ' + currentFloor + ' destinationFloor = ' + destinationFloor);
     setFloor(currentFloor);
+
+    // Cause the elevator to stop between the 2nd and 3rd floor if haveBreakdown is true
+    if ( haveBreakdown && (elevatorState == "UP") && (currentFloor == 2)) {
+      console.log('HAVE THE BREAKDOWN NOW!');
+      // Run the elevator long enough to get it past the 2nd floor and halfway to the third
+      setTimeout ( function() {
+          motorStop();
+          // Send platform event
+          setStatus("200");
+          // Flash trouble LED
+          startLEDFlash();
+        }
+        , 2000 );
+      return;
+    }
+
     // If the motor is running, stop it if the elevator is at or past
     // the destination floor
     if ( ((elevatorState == "UP") && (currentFloor >= destinationFloor)) ||
@@ -318,28 +369,45 @@ function onTakeRiderToFloor(m) {
   var dataFromServer = m.data;
   var floor = dataFromServer.payload.Floor__c;
 
+  if (dataFromServer.payload.HaveBreakdown__c) {
+    haveBreakdown = true;
+    console.log('BREAKDOWN ABOUT TO HAPPEN!');
+    // Send platform event
+    setStatus("100");
+
+  } else {
+    haveBreakdown = false;
+    // Send platform event
+    setStatus("OK");
+    // Clear trouble LED
+    stopLEDFlash();
+  }
+
   console.log('Taking rider from floor ' + currentFloor + ' to floor ' + floor);
   moveElevatorToFloor(floor);
 
-  // Wait 30 sec, then tell the Orchestration we are done.
-  endOfRideTimer = setTimeout(
-    function () {
-      // Create the platform event
-      var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
-      rideCompleteEvent.set('DeviceId__c', DEVICEID);
-      org.insert({
-        sobject: rideCompleteEvent
+  // If haveBreakdown, don't let the endOfRideTimer start up the elevator again
+  if (!haveBreakdown) {
+    // Wait 30 sec, then tell the Orchestration we are done.
+    endOfRideTimer = setTimeout(
+      function () {
+        // Create the platform event
+        var rideCompleteEvent = nforce.createSObject('Ride_Complete__e');
+        rideCompleteEvent.set('DeviceId__c', DEVICEID);
+        org.insert({
+          sobject: rideCompleteEvent
+        },
+          function (err, resp) {
+            if (err) return console.log(err);
+            console.log('Ride Complete platform event created ' + resp.id);
+          });
+
+        startIdleTimer();
+
       },
-        function (err, resp) {
-          if (err) return console.log(err);
-          console.log('Ride Complete platform event created ' + resp.id);
-        });
-
-      startIdleTimer();
-
-    },
-    30000
-  );
+      30000
+    );
+  }
 
 }
 
@@ -449,6 +517,9 @@ org.authenticate({
       // Initialize hardware and get this party started!
       configureGPIO();
       startIdleTimer();
+      // Send platform event
+      setStatus("OK");
+
       
     } else {
       console.log('Unable to connect to cometd ' + JSON.stringify(h));
