@@ -9,7 +9,7 @@ The code is notified of an approaching rider by a physical switch connected to P
 
 Salesforce IoT Explorer handles the event by invoking Einstein Vision.  The photo is matched against a model containing photos of various LEGO figures.  If a match of sufficient confidence is found, the assigned work floor is retrieved from the Contact record for the matching figure.  IoT Explorer will then publish a Platform Event indicating the desired floor.
 
-This code receives the Platform Event and moves the elevator to the desired floor.  The elevator is powered by a LEGO Mindstorm motor driven through pins 36 and 38.  Reed sensors on each floor connected to pins [37, 35, 33, 31, 29, 23, 21, 19] provide feedback as to the location of the elevator car.
+This code receives the Platform Event and moves the elevator to the desired floor.  The elevator is powered by a LEGO Mindstorm motor driven through pins 36 and 38.  Reed sensors on each floor connected to pins [37, 35, 33, 31, 29, 23, 21, 19] provide feedback as to the location of the elevator car.  As the car changes floors, the code publishes another Platform Event so that subscribers know the current location of the car (i.e. the Lighting App that simulates the interior control panel fo the elevator car).  When the elevator car reaches the desired floor, the code publishes another Platform Event thereby notifying any subscribers (the Salesforce org) that the ride is finished.
 
 Once the elevator car has been idle for 30 seconds, the code will move the elevator car randomly between floors until interrupted by the next approaching rider.
 
