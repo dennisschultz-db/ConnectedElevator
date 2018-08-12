@@ -37,7 +37,26 @@ $ cd ~
 $ git clone https://github.com/dschultz-mo/ConnectedElevator
 $ cd ConnectedElevator
 $ npm install
+```
+
+The connection parameters for the Salesforce org are maintained in a .env file at the root of the project.  You must manually create this file and populate its contents:
+
+```
+CLIENT_ID=<id>
+CLIENT_SECRET=<secret>
+SFUSERNAME=<username>
+SFPASSWORD=<password>
+SECURITY_TOKEN=<token>
+```
+
+You can now start the code with either
+
+```sh
 $ node index.js
+```
+or
+```sh
+$ nodemon
 ```
 
 Your app should now be running on [localhost:5000](http://localhost:5000/).
